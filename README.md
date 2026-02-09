@@ -16,7 +16,6 @@ An enterprise-grade **Retrieval-Augmented Generation (RAG)** system that transfo
 - **💬 Web Interface** - Beautiful Gradio UI with zero backend required
 - **🔗 Multiple Retrieval Methods** - Keyword-based (fast) and semantic search (accurate)
 - **📍 Source Attribution** - Every answer includes citations showing where information came from
-- **🔌 Extensible** - Easy to integrate with Jira, databases, or custom systems
 - **🔐 Privacy First** - Documents processed locally, only sent to AI for generation
 
 ## 📋 Table of Contents
@@ -89,10 +88,6 @@ pip install -r requirements.txt
 # 4. Create .env file with API key
 cat > .env << 'EOF'
 OPENROUTER_API_KEY=sk-your-key-here
-JIRA_DOMAIN=your-jira-domain.atlassian.net
-JIRA_EMAIL=your-email@example.com
-JIRA_API_TOKEN=your-token
-JIRA_PROJECT_KEY=DEV
 EOF
 
 # 5. Run application
@@ -105,10 +100,6 @@ python rag_web_ui.py
    - Go to https://openrouter.ai/
    - Sign up and create API key
    - Add to `.env`
-
-2. **Jira Integration** (Optional)
-   - Follow [JIRA_SETUP.md](JIRA_SETUP.md)
-   - Only needed if using Jira integration
 
 ## 🎯 Usage
 
@@ -160,23 +151,6 @@ for qa in results:
     print(f"A: {qa['answer']}\n")
 ```
 
-### Jira Integration
-
-```python
-from jira_integration import JiraIntegration
-
-# Connect to Jira
-jira = JiraIntegration()
-
-# List all issues
-issues = jira.list_issues()
-print(issues)
-
-# Get AI summary
-summary = jira.summarize_issues()
-print(summary)
-```
-
 ## 🏗️ Architecture
 
 ### How RAG Works
@@ -200,7 +174,6 @@ Answer with Source Citations
 | **SimpleRAG** | Fast keyword-based retrieval | `simple_rag.py` |
 | **AdvancedRAG** | Accurate semantic search | `advanced_rag.py` |
 | **Web UI** | User-friendly interface | `rag_web_ui.py` |
-| **Jira Integration** | Project tracking integration | `jira_integration.py` |
 | **Chatbots** | Alternative interfaces | `chatbot_*.py` |
 
 ### Document Processing
@@ -221,7 +194,6 @@ Ready for retrieval
 
 - **[PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md)** - Detailed project overview
 - **[RAG_GUIDE.md](RAG_GUIDE.md)** - Complete RAG implementation guide
-- **[JIRA_SETUP.md](JIRA_SETUP.md)** - Jira integration instructions
 - **[requirements.txt](requirements.txt)** - All dependencies
 
 ## 💡 Examples
@@ -275,11 +247,6 @@ answer = rag.answer_question("What's in the new document?")
 # Required
 OPENROUTER_API_KEY=your-key
 
-# Optional - Jira Integration
-JIRA_DOMAIN=your-jira.atlassian.net
-JIRA_EMAIL=your-email@example.com
-JIRA_API_TOKEN=your-token
-JIRA_PROJECT_KEY=DEV
 ```
 
 ### Customization
@@ -380,15 +347,6 @@ qa_pairs = [
     {"question": "Projections?", "answer": "..."}
 ]
 rag.save_qa_pairs(qa_pairs, "output.json")
-```
-
-### Jira Integration
-```python
-from jira_integration import JiraIntegration
-
-jira = JiraIntegration()
-issues = jira.list_issues()
-summary = jira.summarize_issues()
 ```
 
 ## 🔐 Privacy & Security

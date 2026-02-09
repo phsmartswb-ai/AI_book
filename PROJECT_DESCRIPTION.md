@@ -13,7 +13,7 @@ This is an **AI-Powered Document Intelligence Platform** that combines multiple 
 - Reduces AI hallucinations by grounding answers in real data
 
 ### 2. **Multi-Format Document Support**
-- PDF files (MVP.pdf, cityanalysis.pdf, projections.pdf, UnitEconomics5Years.pdf)
+- PDF files (doc1.pdf, doc2.pdf...)
 - Plain text files (document.txt)
 - Automatic document loading and indexing
 
