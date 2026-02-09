@@ -1,0 +1,6 @@
+openrouter
+requests
+python-dotenv
+gradio
+PyPDF2
+atlassian-python-api
