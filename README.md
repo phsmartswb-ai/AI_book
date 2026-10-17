@@ -138,3 +138,6 @@ Document embeddings are created lazily on the first question and cached in `.cac
 - **First question is slower:** the first semantic search indexes uncached chunks; later questions reuse the cache.
 
 More background is available in [docs/PROJECT_DESCRIPTION.md](docs/PROJECT_DESCRIPTION.md) and [docs/RAG_GUIDE.md](docs/RAG_GUIDE.md).
+
+![Uploading image.png…]()
+
