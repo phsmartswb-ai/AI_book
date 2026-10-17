@@ -139,5 +139,6 @@ Document embeddings are created lazily on the first question and cached in `.cac
 
 More background is available in [docs/PROJECT_DESCRIPTION.md](docs/PROJECT_DESCRIPTION.md) and [docs/RAG_GUIDE.md](docs/RAG_GUIDE.md).
 
-![Uploading image.png…]()
+<img width="1434" height="870" alt="image" src="https://github.com/user-attachments/assets/c0200316-6510-421b-a3d5-1888003ceb51" />
+
 
