@@ -1,4 +1,5 @@
 import unittest
+import tempfile
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -10,6 +11,7 @@ from rag_app.ui import (
     _format_search_explorer_results,
     _format_sources_html,
     _get_document_metadata,
+    _persist_upload,
     build_app,
     stream_answer,
 )
@@ -74,6 +76,22 @@ class UIStreamTests(unittest.TestCase):
 
         missing_meta, _ = _get_document_metadata("nonexistent.pdf", engine)
         self.assertIn("not found", missing_meta)
+
+    def test_persist_upload_avoids_overwriting_existing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_dir = root / "uploads"
+            destination = root / "documents"
+            source_dir.mkdir()
+            source = source_dir / "notes.txt"
+            source.write_text("new content", encoding="utf-8")
+            destination.mkdir()
+            (destination / "notes.txt").write_text("existing content", encoding="utf-8")
+
+            copied = _persist_upload(source, destination)
+
+            self.assertEqual(copied.name, "notes-2.txt")
+            self.assertEqual(copied.read_text(encoding="utf-8"), "new content")
 
     def test_build_app_returns_blocks(self) -> None:
         engine = Mock()

@@ -68,6 +68,17 @@ class RAGEngineTests(unittest.TestCase):
             self.assertFalse(engine.add_document(path))
             self.assertEqual(len(engine.documents), 1)
 
+    def test_remove_document_rebuilds_index_without_deleting_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "notes.txt"
+            path.write_text("A useful product roadmap.", encoding="utf-8")
+            engine = RAGEngine([path], settings=settings(Path(temp_dir)))
+
+            self.assertTrue(engine.remove_document("notes.txt"))
+            self.assertEqual(engine.documents, [])
+            self.assertEqual(engine.chunks, [])
+            self.assertTrue(path.exists())
+
     def test_search_includes_document_file_name(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "MVP-notes.txt"
@@ -107,6 +118,42 @@ class RAGEngineTests(unittest.TestCase):
             self.assertEqual(answer, "The MVP launches in June [notes.txt].")
             request_payload = session.post.call_args.kwargs["json"]
             self.assertIn("notes.txt", request_payload["messages"][1]["content"])
+
+    def test_answer_reuses_results_and_includes_recent_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "notes.txt"
+            path.write_text("Revenue reaches break-even in year two.", encoding="utf-8")
+            session = Mock()
+            response = Mock()
+            response.json.return_value = {
+                "choices": [{"message": {"content": "Break-even is in year two."}}]
+            }
+            response.raise_for_status.return_value = None
+            session.post.return_value = response
+            engine = RAGEngine([path], settings=settings(Path(temp_dir)), session=session)
+            results = engine.search("break-even")
+            engine.search = Mock(side_effect=AssertionError("search should not run twice"))
+            history = [
+                {"role": "user", "content": "Tell me about revenue."},
+                {"role": "assistant", "content": "Revenue grows over time."},
+            ]
+
+            answer = engine.answer_question("When does it break even?", results=results, history=history)
+
+            self.assertEqual(answer, "Break-even is in year two.")
+            messages = session.post.call_args.kwargs["json"]["messages"]
+            self.assertEqual(messages[1:3], history)
+
+    def test_contextualize_query_adds_recent_user_questions(self) -> None:
+        history = [
+            {"role": "user", "content": "What are the projections?"},
+            {"role": "assistant", "content": "They cover five years."},
+        ]
+
+        query = RAGEngine.contextualize_query("What about year two?", history)
+
+        self.assertIn("What are the projections?", query)
+        self.assertIn("What about year two?", query)
 
     def test_timeout_has_a_friendly_message(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

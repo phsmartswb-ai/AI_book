@@ -124,6 +124,22 @@ class RAGEngine:
     def add_document(self, path: str | Path) -> bool:
         return bool(self.add_documents([path]))
 
+    def remove_document(self, name: str) -> bool:
+        """Remove a document from the active in-memory index without deleting its file."""
+        remaining = [document for document in self.documents if document.path.name != name]
+        if len(remaining) == len(self.documents):
+            return False
+        self.documents = remaining
+        self._rebuild_chunks()
+        return True
+
+    def reload_documents(self) -> int:
+        """Reload the configured documents directory and rebuild the active index."""
+        self.documents = []
+        self.chunks = []
+        self._chunk_embeddings = None
+        return self.add_documents(self.discover_documents())
+
     def _read_document(self, path: Path) -> Document:
         if not path.is_file():
             raise ValueError("file does not exist")
@@ -358,14 +374,39 @@ class RAGEngine:
         ]
         return sorted(results, key=lambda result: result.score, reverse=True)[:limit]
 
-    def answer_question(self, question: str, verbose: bool = False) -> str:
+    @staticmethod
+    def contextualize_query(
+        question: str,
+        history: Sequence[dict[str, str]] | None = None,
+        previous_questions: int = 2,
+    ) -> str:
+        """Add recent user turns to short follow-up queries for better retrieval."""
+        prior = [
+            str(message.get("content", "")).strip()
+            for message in (history or [])
+            if message.get("role") == "user" and str(message.get("content", "")).strip()
+        ][-previous_questions:]
+        if not prior:
+            return question.strip()
+        context = "\n".join(f"Previous question: {item}" for item in prior)
+        return f"{context}\nCurrent question: {question.strip()}"
+
+    def answer_question(
+        self,
+        question: str,
+        verbose: bool = False,
+        results: Sequence[SearchResult] | None = None,
+        history: Sequence[dict[str, str]] | None = None,
+    ) -> str:
         question = question.strip()
         if not question:
             return "Please enter a question."
         if not self.chunks:
             return "No documents are loaded. Add PDF or TXT files and try again."
 
-        results = self.search(question)
+        if results is None:
+            search_query = self.contextualize_query(question, history)
+            results = self.search(search_query)
         if not results:
             return "I couldn't find relevant information in the loaded documents."
         if not self.api_key:
@@ -381,6 +422,13 @@ class RAGEngine:
                 print(f"{result.chunk.source.name}: {result.score:.2f}")
 
         try:
+            recent_history = [
+                {"role": role, "content": content}
+                for message in (history or [])[-6:]
+                if (role := message.get("role")) in {"user", "assistant"}
+                and isinstance((content := message.get("content")), str)
+                and content.strip()
+            ]
             response = self.session.post(
                 self.endpoint,
                 headers={
@@ -397,6 +445,7 @@ class RAGEngine:
                                 "say so. Cite sources using their file names."
                             ),
                         },
+                        *recent_history,
                         {
                             "role": "user",
                             "content": f"CONTEXT:\n{context}\n\nQUESTION: {question}",

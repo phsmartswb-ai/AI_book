@@ -6,10 +6,10 @@ A local-first Retrieval-Augmented Generation (RAG) application that searches PDF
 
 - Hybrid retrieval combining OpenRouter embeddings with deterministic keyword ranking
 - Three selectable search strategies: hybrid, semantic, and keyword-only
-- Conversational document Q&A with an immediate processing indicator
+- Conversational document Q&A with follow-up context and an immediate processing indicator
 - Retrieved source cards with file names, chunk numbers, text previews, and relevance scores
 - Retrieval Explorer for inspecting search quality without generating an answer
-- Knowledge Base manager for uploading, rescanning, and inspecting extracted document text
+- Knowledge Base manager for temporary or persistent uploads, rescanning, inspection, and active-index removal
 - Runtime controls for top-k, semantic weight, relevance threshold, and generation model
 - Persistent embedding cache with automatic keyword fallback when semantic search is unavailable
 - PDF and UTF-8 text support with duplicate detection and readable extraction errors
@@ -40,10 +40,10 @@ The web application is organized into four tabs:
 
 1. **Q&A Assistant** — ask follow-up questions, review cited source chunks, tune search mode/top-k, and clear the conversation.
 2. **Retrieval Explorer** — run retrieval directly and inspect ranked passages and scores without calling the generation model.
-3. **Knowledge Base** — upload PDF/TXT files, rescan `data/documents/`, and inspect document metadata and extracted content.
+3. **Knowledge Base** — upload PDF/TXT files temporarily or save them to `data/documents/`, rescan the library, inspect extracted content, and remove files from the active index without deleting them.
 4. **Settings & Diagnostics** — adjust retrieval parameters and the OpenRouter generation model for the current session.
 
-Uploaded documents and settings changes remain in memory for the current process. Put permanent knowledge files in `data/documents/` and use `.env` for persistent configuration.
+Uploads remain in memory unless **Keep uploads in data/documents** is selected. Runtime settings remain active for the current process; use `.env` for persistent configuration.
 
 ## Documents
 
@@ -121,9 +121,10 @@ python -m unittest discover -v
 1. PDF/TXT files are loaded and normalized.
 2. Text is split into overlapping chunks.
 3. OpenRouter embeddings measure semantic similarity between the question and chunks.
-4. Hybrid ranking combines semantic similarity with deterministic keyword relevance.
-5. The highest-ranked context is sent to OpenRouter.
-6. The model is instructed to answer only from context and cite file names.
+4. Recent user questions are included when retrieving context for short follow-ups.
+5. Hybrid ranking combines semantic similarity with deterministic keyword relevance.
+6. The retrieved chunks are reused for generation without a second search.
+7. The model is instructed to answer only from context and cite file names.
 
 Document embeddings are created lazily on the first question and cached in `.cache/embeddings.json`. Later searches reuse the cached vectors and embed only the new query. If embeddings are unavailable, hybrid mode automatically falls back to keyword search.
 

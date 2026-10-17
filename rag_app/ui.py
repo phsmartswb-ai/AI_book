@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import html
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -354,6 +355,17 @@ APP_CSS = """
 @keyframes answer-loader-spin {
     to { transform: rotate(360deg); }
 }
+
+@media (max-width: 720px) {
+    .gradio-container { padding: 0.65rem !important; }
+    .rag-header { padding: 1rem; }
+    .rag-header-title { font-size: 1.25rem; }
+    .rag-badge-group { gap: 0.35rem; }
+    .rag-badge { font-size: 0.7rem; }
+    .sidebar-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .source-card, .search-result-card { padding: 0.7rem; }
+    .source-card-header, .search-result-header { align-items: flex-start; }
+}
 """
 
 
@@ -404,7 +416,9 @@ def _generate_sidebar_stats(rag: RAGEngine) -> str:
     chunks_count = len(rag.chunks)
     mode = rag.settings.search_mode.capitalize()
     top_k = rag.settings.top_k
-    doc_list = "\n".join(f"- `{doc.path.name}`" for doc in rag.documents) or "_No documents loaded_"
+    doc_list = "".join(
+        f"<div>• {html.escape(doc.path.name)}</div>" for doc in rag.documents
+    ) or "<em>No documents loaded</em>"
 
     return f"""
 <div class="sidebar-card">
@@ -542,7 +556,8 @@ def _get_document_metadata(doc_name: str | None, rag: RAGEngine) -> tuple[str, s
         return "<p style='color: #64748b;'>Select a document from the dropdown above to view its metadata and content.</p>", ""
     doc = next((d for d in rag.documents if d.path.name == doc_name), None)
     if not doc:
-        return f"<p style='color: #ef4444;'>Document '{doc_name}' was not found in the index.</p>", ""
+        safe_name = html.escape(doc_name)
+        return f"<p style='color: #ef4444;'>Document '{safe_name}' was not found in the index.</p>", ""
 
     try:
         size_kb = f"{doc.path.stat().st_size / 1024:.1f} KB"
@@ -563,6 +578,19 @@ def _get_document_metadata(doc_name: str | None, rag: RAGEngine) -> tuple[str, s
     </div>
     """
     return meta_html, doc.content
+
+
+def _persist_upload(source: str | Path, destination: Path) -> Path:
+    """Copy an upload into the document library without overwriting an existing file."""
+    source_path = Path(source).resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    candidate = destination / source_path.name
+    counter = 2
+    while candidate.exists():
+        candidate = destination / f"{source_path.stem}-{counter}{source_path.suffix}"
+        counter += 1
+    shutil.copy2(source_path, candidate)
+    return candidate
 
 
 def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
@@ -681,6 +709,11 @@ def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
                             file_types=[".pdf", ".txt"],
                             type="filepath",
                         )
+                        persist_uploads = gr.Checkbox(
+                            value=False,
+                            label="Keep uploads in data/documents",
+                            info="Copies files into the configured library so they return after restart.",
+                        )
                         upload_btn = gr.Button("Add to Knowledge Base", variant="primary")
                         upload_alert = gr.Markdown()
                         rescan_btn = gr.Button("🔄 Rescan data/documents Directory", variant="secondary")
@@ -691,6 +724,11 @@ def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
                             choices=[doc.path.name for doc in rag.documents],
                             value=rag.documents[0].path.name if rag.documents else None,
                             label="Select Document to View",
+                        )
+                        remove_doc_btn = gr.Button(
+                            "Remove from Active Index",
+                            variant="secondary",
+                            size="sm",
                         )
                         doc_meta_display = gr.HTML()
                         doc_content_display = gr.Textbox(
@@ -770,7 +808,8 @@ def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
         def chat_stream(
             question: str, history: list[dict] | None
         ) -> Iterator[tuple[list[dict], str, str]]:
-            hist = list(history or [])
+            previous_history = list(history or [])
+            hist = list(previous_history)
             if not question.strip():
                 yield hist, "", "<div class='sources-empty-state'>Please enter a question to view citations.</div>"
                 return
@@ -782,12 +821,17 @@ def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
             })
             yield hist, "", "<div class='sources-loading'><em>Searching knowledge base for matching passages...</em></div>"
 
-            # Retrieve sources using configured settings
-            results = rag.search(question, top_k=rag.settings.top_k)
+            # Include recent user turns so short follow-ups retrieve the right context.
+            retrieval_query = rag.contextualize_query(question, previous_history)
+            results = rag.search(retrieval_query, top_k=rag.settings.top_k)
             sources_html = _format_sources_html(results)
 
-            # Generate LLM answer
-            answer = rag.answer_question(question)
+            # Reuse the retrieved chunks instead of paying for a second semantic search.
+            answer = rag.answer_question(
+                question,
+                results=results,
+                history=previous_history,
+            )
             if rag.semantic_error and rag.api_key:
                 answer += "\n\n> ⚠️ *Semantic search was unavailable; keyword fallback was used.*"
 
@@ -820,7 +864,10 @@ def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
             finally:
                 rag.settings = dataclasses.replace(rag.settings, search_mode=old_mode)
 
-        def handle_upload(files: list[str] | str | None) -> tuple[str, str, str, gr.Dropdown, str, str]:
+        def handle_upload(
+            files: list[str] | str | None,
+            persist: bool,
+        ) -> tuple[str, str, str, gr.Dropdown, str, str]:
             if not files:
                 empty_meta, empty_content = _get_document_metadata(None, rag)
                 return (
@@ -833,10 +880,21 @@ def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
                 )
             paths = [files] if isinstance(files, str) else files
             try:
-                added = rag.add_documents(paths)
-                msg = f"✅ Successfully added **{added}** new document{'s' if added != 1 else ''} to the index."
+                indexed_paths = (
+                    [_persist_upload(path, rag.settings.documents_dir) for path in paths]
+                    if persist
+                    else [Path(path) for path in paths]
+                )
+                added = rag.add_documents(indexed_paths)
+                persistence_note = " and saved to the document library" if persist else " for this session"
+                msg = (
+                    f"✅ Added **{added}** new document{'s' if added != 1 else ''} "
+                    f"to the index{persistence_note}."
+                )
             except ValueError as exc:
                 msg = f"⚠️ {exc}"
+            except OSError as exc:
+                msg = f"⚠️ Could not save uploaded file: {exc}"
 
             choices = [d.path.name for d in rag.documents]
             new_val = choices[-1] if choices else None
@@ -851,11 +909,7 @@ def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
             )
 
         def handle_rescan() -> tuple[str, str, str, gr.Dropdown, str, str]:
-            paths = rag.discover_documents()
-            rag.documents.clear()
-            rag.chunks.clear()
-            rag._chunk_embeddings = None
-            added = rag.add_documents(paths)
+            added = rag.reload_documents()
             choices = [d.path.name for d in rag.documents]
             new_val = choices[0] if choices else None
             meta_html, content_str = _get_document_metadata(new_val, rag)
@@ -865,6 +919,28 @@ def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
                 _generate_header_html(rag),
                 _generate_sidebar_stats(rag),
                 gr.Dropdown(choices=choices, value=new_val),
+                meta_html,
+                content_str,
+            )
+
+        def handle_remove_document(
+            doc_name: str | None,
+        ) -> tuple[str, str, str, gr.Dropdown, str, str]:
+            removed = bool(doc_name and rag.remove_document(doc_name))
+            choices = [document.path.name for document in rag.documents]
+            new_value = choices[0] if choices else None
+            meta_html, content_str = _get_document_metadata(new_value, rag)
+            safe_name = f"`{doc_name}`" if doc_name else "the selected document"
+            message = (
+                f"✅ Removed {safe_name} from the active index. The original file was not deleted."
+                if removed
+                else "⚠️ Select a loaded document to remove."
+            )
+            return (
+                message,
+                _generate_header_html(rag),
+                _generate_sidebar_stats(rag),
+                gr.Dropdown(choices=choices, value=new_value),
                 meta_html,
                 content_str,
             )
@@ -902,12 +978,14 @@ def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
             inputs=[question_input, chatbot],
             outputs=[chatbot, question_input, sources_display],
             show_progress="hidden",
+            stream_every=0.1,
         )
         question_input.submit(
             chat_stream,
             inputs=[question_input, chatbot],
             outputs=[chatbot, question_input, sources_display],
             show_progress="hidden",
+            stream_every=0.1,
         )
         clear_chat_btn.click(
             clear_chat,
@@ -936,7 +1014,7 @@ def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
         # Wire Knowledge Base Tab
         upload_btn.click(
             handle_upload,
-            inputs=[file_uploader],
+            inputs=[file_uploader, persist_uploads],
             outputs=[
                 upload_alert,
                 header_display,
@@ -961,6 +1039,18 @@ def build_app(engine: RAGEngine | None = None) -> gr.Blocks:
             handle_doc_selection,
             inputs=[doc_selector],
             outputs=[doc_meta_display, doc_content_display],
+        )
+        remove_doc_btn.click(
+            handle_remove_document,
+            inputs=[doc_selector],
+            outputs=[
+                upload_alert,
+                header_display,
+                sidebar_stats,
+                doc_selector,
+                doc_meta_display,
+                doc_content_display,
+            ],
         )
 
         # Initialize document preview on load
