@@ -1,4 +1,6 @@
 .env
+.venv/
+.cache/
 __pycache__/
 *.pyc
 *.pyo
@@ -8,5 +10,8 @@ __pycache__/
 *.pdf
 *.log
 venv/
+build/
+dist/
+*.egg-info/
 .vscode/
 .idea/

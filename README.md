@@ -1,408 +1,139 @@
-# 🤖 AI Document Intelligence Platform - RAG Chatbot
+# Document Intelligence & RAG Studio
 
-> **Ask questions about your documents. Get accurate answers with source citations.**
+A local-first Retrieval-Augmented Generation (RAG) application that searches PDF/TXT files with hybrid semantic retrieval and uses OpenRouter to produce grounded, cited answers.
 
-An enterprise-grade **Retrieval-Augmented Generation (RAG)** system that transforms your document collection into an intelligent Q&A assistant powered by AI.
+## Features
 
-[![GitHub](https://img.shields.io/badge/GitHub-phsmartswb--ai%2FAI__book-blue?logo=github)](https://github.com/phsmartswb-ai/AI_book)
-[![Python 3.8+](https://img.shields.io/badge/Python-3.8+-green)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+- Hybrid retrieval combining OpenRouter embeddings with deterministic keyword ranking
+- Three selectable search strategies: hybrid, semantic, and keyword-only
+- Conversational document Q&A with an immediate processing indicator
+- Retrieved source cards with file names, chunk numbers, text previews, and relevance scores
+- Retrieval Explorer for inspecting search quality without generating an answer
+- Knowledge Base manager for uploading, rescanning, and inspecting extracted document text
+- Runtime controls for top-k, semantic weight, relevance threshold, and generation model
+- Persistent embedding cache with automatic keyword fallback when semantic search is unavailable
+- PDF and UTF-8 text support with duplicate detection and readable extraction errors
+- Offline unit tests for document loading, retrieval, API failures, semantic search, and UI helpers
 
-## ✨ Key Features
+## Quick start
 
-- **🔍 Smart Document Retrieval** - Finds relevant information from your documents instantly
-- **🤖 AI-Powered Answers** - Generates accurate responses based on actual document content
-- **📚 Multi-Format Support** - Works with PDFs, text files, and mixed document collections
-- **💬 Web Interface** - Beautiful Gradio UI with zero backend required
-- **🔗 Multiple Retrieval Methods** - Keyword-based (fast) and semantic search (accurate)
-- **📍 Source Attribution** - Every answer includes citations showing where information came from
-- **🔐 Privacy First** - Documents processed locally, only sent to AI for generation
-
-## 📋 Table of Contents
-
-- [Quick Start](#quick-start)
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Architecture](#architecture)
-- [Documentation](#documentation)
-- [Examples](#examples)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-
-## 🚀 Quick Start
-
-### 1. Clone & Setup (5 minutes)
+Python 3.10 or newer is recommended.
 
 ```bash
-# Clone the repository
-git clone https://github.com/phsmartswb-ai/AI_book.git
-cd AI_book
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure API key
-echo "OPENROUTER_API_KEY=your-key-here" > .env
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env
 ```
 
-### 2. Run Web Interface
+Add your OpenRouter key to `.env`, then run:
 
 ```bash
-python rag_web_ui.py
+python app.py
 ```
 
-Open browser to `http://localhost:7860` and start asking questions!
+Open <http://127.0.0.1:7860>. The original command `python rag_web_ui.py` remains available as a compatibility launcher.
 
-### 3. Example Questions
+## Using the interface
 
+The web application is organized into four tabs:
+
+1. **Q&A Assistant** — ask follow-up questions, review cited source chunks, tune search mode/top-k, and clear the conversation.
+2. **Retrieval Explorer** — run retrieval directly and inspect ranked passages and scores without calling the generation model.
+3. **Knowledge Base** — upload PDF/TXT files, rescan `data/documents/`, and inspect document metadata and extracted content.
+4. **Settings & Diagnostics** — adjust retrieval parameters and the OpenRouter generation model for the current session.
+
+Uploaded documents and settings changes remain in memory for the current process. Put permanent knowledge files in `data/documents/` and use `.env` for persistent configuration.
+
+## Documents
+
+Put `.pdf` and `.txt` knowledge files in `data/documents/`. Files uploaded in the UI are added to the in-memory index for the current app session.
+
+The app extracts text locally. In semantic/hybrid mode, chunks and questions are sent to OpenRouter for embedding; generation sends only the retrieved chunks plus the question. Use keyword mode if document text must not be sent for embedding. Scanned PDFs need OCR before this app can read them.
+
+## Configuration
+
+Copy `.env.example` to `.env`. Available settings are:
+
+| Variable | Default | Purpose |
+|---|---:|---|
+| `OPENROUTER_API_KEY` | required | OpenRouter credential |
+| `OPENROUTER_MODEL` | `openrouter/auto` | Generation model |
+| `OPENROUTER_EMBEDDING_MODEL` | `openai/text-embedding-3-small` | Semantic embedding model |
+| `OPENROUTER_TIMEOUT` | `60` | Request timeout in seconds |
+| `RAG_DOCUMENTS_DIR` | `data/documents` | Local knowledge directory |
+| `RAG_CHUNK_SIZE` | `800` | Maximum chunk size in characters |
+| `RAG_CHUNK_OVERLAP` | `120` | Context shared by adjacent chunks |
+| `RAG_TOP_K` | `4` | Chunks supplied to the model |
+| `RAG_SEARCH_MODE` | `hybrid` | `hybrid`, `semantic`, or `keyword` retrieval |
+| `RAG_SEMANTIC_WEIGHT` | `0.7` | Semantic contribution to hybrid ranking |
+| `RAG_SEMANTIC_THRESHOLD` | `0.2` | Minimum normalized retrieval score |
+| `RAG_EMBEDDING_BATCH_SIZE` | `32` | Texts per embedding request |
+| `RAG_EMBEDDING_CACHE` | `.cache/embeddings.json` | Persistent vector cache |
+| `GRADIO_SERVER_NAME` | `127.0.0.1` | UI bind address |
+| `GRADIO_SERVER_PORT` | automatic | Require a specific UI port |
+
+## Project layout
+
+```text
+.
+├── app.py                    # Main web entry point
+├── rag_app/
+│   ├── config.py             # Environment-based settings
+│   ├── engine.py             # Loading, chunking, hybrid search, generation
+│   └── ui.py                 # Gradio studio, source cards, diagnostics
+├── data/documents/           # Local PDF/TXT knowledge base
+├── scripts/openrouter_chat.py # Standalone API test/chat
+├── tests/                    # Offline unit tests
+├── docs/                     # Additional project notes
+├── simple_rag.py             # Compatibility CLI/API
+└── rag_web_ui.py             # Compatibility web launcher
 ```
-"What is the MVP?"
-"What are the financial projections for year 1?"
-"Summarize the city analysis findings"
-"What is the unit economics breakdown?"
-```
 
-## 💾 Installation
+## Commands
 
-### Requirements
-
-- Python 3.8 or higher
-- pip (Python package manager)
-- OpenRouter API key
-
-### Step-by-Step
+Run the web app:
 
 ```bash
-# 1. Clone repository
-git clone https://github.com/phsmartswb-ai/AI_book.git
-cd AI_book
-
-# 2. Create virtual environment (optional but recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Create .env file with API key
-cat > .env << 'EOF'
-OPENROUTER_API_KEY=sk-your-key-here
-EOF
-
-# 5. Run application
-python rag_web_ui.py
+python app.py
 ```
 
-### Get API Keys
-
-1. **OpenRouter API** (Required)
-   - Go to https://openrouter.ai/
-   - Sign up and create API key
-   - Add to `.env`
-
-## 🎯 Usage
-
-### Web Interface (Easiest)
+Run a terminal document chat:
 
 ```bash
-python rag_web_ui.py
+python simple_rag.py
 ```
 
-Then:
-1. Type your question in the text box
-2. Click "Get Answer"
-3. View the AI response with source citations
+Test OpenRouter without document retrieval:
 
-### Python Script (Programmatic)
-
-```python
-from simple_rag import SimpleRAG
-
-# Initialize with documents
-rag = SimpleRAG(doc_paths=["MVP.pdf", "projections.pdf"])
-
-# Ask a question
-answer = rag.answer_question("What are the financial projections?")
-print(answer)
-
-# Interactive chat
-rag.interactive_chat()
-```
-
-### Advanced RAG with Embeddings
-
-```python
-from advanced_rag import AdvancedRAG
-
-# Initialize with semantic search
-rag = AdvancedRAG(use_embeddings=True)
-
-# Batch process questions
-questions = [
-    "What is the MVP?",
-    "What are the projections?",
-    "Who are the customers?"
-]
-
-results = rag.batch_qa(questions)
-for qa in results:
-    print(f"Q: {qa['question']}")
-    print(f"A: {qa['answer']}\n")
-```
-
-## 🏗️ Architecture
-
-### How RAG Works
-
-```
-User Question
-    ↓
-[RETRIEVE] → Search documents for relevant chunks
-    ↓
-[AUGMENT] → Build AI prompt with found context
-    ↓
-[GENERATE] → Send to AI model
-    ↓
-Answer with Source Citations
-```
-
-### System Components
-
-| Component | Purpose | File |
-|-----------|---------|------|
-| **SimpleRAG** | Fast keyword-based retrieval | `simple_rag.py` |
-| **AdvancedRAG** | Accurate semantic search | `advanced_rag.py` |
-| **Web UI** | User-friendly interface | `rag_web_ui.py` |
-| **Chatbots** | Alternative interfaces | `chatbot_*.py` |
-
-### Document Processing
-
-```
-Input Documents
-    ↓
-Load (PDF/TXT parsing)
-    ↓
-Chunk (500-char chunks with overlap)
-    ↓
-Index (keyword/semantic indexing)
-    ↓
-Ready for retrieval
-```
-
-## 📚 Documentation
-
-- **[PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md)** - Detailed project overview
-- **[RAG_GUIDE.md](RAG_GUIDE.md)** - Complete RAG implementation guide
-- **[requirements.txt](requirements.txt)** - All dependencies
-
-## 💡 Examples
-
-### Example 1: Ask About Financial Data
-
-```python
-rag = SimpleRAG(doc_paths=["projections.pdf", "UnitEconomics5Years.pdf"])
-
-question = "What is the revenue projection for year 3?"
-answer = rag.answer_question(question, verbose=True)
-# Output includes retrieved chunks and source citations
-```
-
-### Example 2: Batch Analysis
-
-```python
-questions = [
-    "What is the market size?",
-    "Who are the main competitors?",
-    "What is our competitive advantage?",
-    "What is the go-to-market strategy?"
-]
-
-for q in questions:
-    print(f"\nQ: {q}")
-    answer = rag.answer_question(q)
-    print(f"A: {answer}")
-```
-
-### Example 3: Document Upload
-
-```python
-# Via web UI:
-# 1. Click "Upload Document"
-# 2. Select PDF or TXT file
-# 3. Click "Process Document"
-# 4. Immediately available for querying
-
-# Via code:
-rag._load_document("new_document.pdf")
-rag._chunk_documents()
-answer = rag.answer_question("What's in the new document?")
-```
-
-## ⚙️ Configuration
-
-### Environment Variables (.env)
-
-```
-# Required
-OPENROUTER_API_KEY=your-key
-
-```
-
-### Customization
-
-**Change retrieval method:**
-```python
-# Keyword-based (fast)
-chunks = rag._retrieve_relevant_chunks(query, top_k=3)
-
-# Semantic search (accurate)
-chunks = rag._retrieve_by_similarity(query, top_k=3)
-```
-
-**Adjust chunk size:**
-```python
-rag._chunk_documents(chunk_size=1000, overlap=200)
-```
-
-**Use different AI model:**
-```python
-rag.model = "openrouter/openai/gpt-4"  # or any OpenRouter model
-```
-
-## 🔍 Retrieval Methods
-
-### SimpleRAG - Keyword Matching
-- ✅ Fast (sub-100ms)
-- ✅ No ML model needed
-- ✅ Good for exact phrases
-- ❌ Misses semantic similarities
-
-### AdvancedRAG - Semantic Search
-- ✅ Accurate concept matching
-- ✅ Handles paraphrasing
-- ✅ Better relevance
-- ⏱️ Slightly slower
-
-## 🛠️ Troubleshooting
-
-### "No documents loaded"
 ```bash
-# Add documents to the directory
-# Supported formats: .pdf, .txt
-
-# Or specify paths explicitly
-rag = SimpleRAG(doc_paths=["path/to/doc1.pdf", "path/to/doc2.txt"])
+python scripts/openrouter_chat.py
 ```
 
-### "No relevant information found"
-```python
-# Try rephrasing question
-# Increase top_k to retrieve more chunks
-chunks = rag._retrieve_relevant_chunks(query, top_k=5)
+Run the offline test suite:
 
-# Check document content
-for doc in rag.documents:
-    print(f"Loaded: {doc['path']}")
-```
-
-### "OPENROUTER_API_KEY not set"
 ```bash
-# Add to .env
-echo "OPENROUTER_API_KEY=your-key" > .env
-
-# Or set environment variable
-export OPENROUTER_API_KEY=your-key
+python -m unittest discover -v
 ```
 
-### "Gradio not installed"
-```bash
-pip install gradio
-```
+## How answers are produced
 
-## 📊 Performance
+1. PDF/TXT files are loaded and normalized.
+2. Text is split into overlapping chunks.
+3. OpenRouter embeddings measure semantic similarity between the question and chunks.
+4. Hybrid ranking combines semantic similarity with deterministic keyword relevance.
+5. The highest-ranked context is sent to OpenRouter.
+6. The model is instructed to answer only from context and cite file names.
 
-| Metric | Value |
-|--------|-------|
-| Documents Indexed | 7+ |
-| Max Chunks | 100+ |
-| Retrieval Latency | <100ms |
-| Generation Time | 2-5s |
-| Accuracy (RAG) | High |
-| Supported Formats | PDF, TXT |
+Document embeddings are created lazily on the first question and cached in `.cache/embeddings.json`. Later searches reuse the cached vectors and embed only the new query. If embeddings are unavailable, hybrid mode automatically falls back to keyword search.
 
-## 🚀 Advanced Features
+## Troubleshooting
 
-### Batch Processing
-```python
-rag = SimpleRAG()
-questions = ["Q1", "Q2", "Q3"]
-results = rag.batch_qa(questions)  # Available in AdvancedRAG
-```
+- **No documents loaded:** add PDF/TXT files to `data/documents/` and restart, or upload them in the UI.
+- **No extractable text:** the PDF may be scanned; run OCR first.
+- **Missing API key:** copy `.env.example` to `.env`, add the key, and restart.
+- **Port already in use:** with no `GRADIO_SERVER_PORT` setting, Gradio automatically tries the next available port. If you configured one, change or remove it.
+- **No relevant information:** ask with more specific terms that appear in the documents.
+- **First question is slower:** the first semantic search indexes uncached chunks; later questions reuse the cache.
 
-### Save Q&A Pairs
-```python
-qa_pairs = [
-    {"question": "What is MVP?", "answer": "..."},
-    {"question": "Projections?", "answer": "..."}
-]
-rag.save_qa_pairs(qa_pairs, "output.json")
-```
-
-## 🔐 Privacy & Security
-
-- ✅ **Local Processing** - Documents processed on your machine
-- ✅ **API-Only Sharing** - Only sent to OpenRouter for generation
-- ✅ **No Data Storage** - No server-side storage of documents
-- ✅ **Encrypted Transmission** - HTTPS for all API calls
-- ✅ **.env Protection** - Never commit `.env` to version control
-
-## 📈 Enhancement Roadmap
-
-- [ ] Real embeddings (sentence-transformers)
-- [ ] Vector database (Pinecone, Weaviate)
-- [ ] REST API wrapper
-- [ ] Mobile app interface
-- [ ] Multi-language support
-- [ ] Document version control
-- [ ] Analytics dashboard
-- [ ] Fine-tuned models
-
-## 🤝 Contributing
-
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🎓 Learn More
-
-- [RAG Research Paper](https://arxiv.org/abs/2005.11401)
-- [OpenRouter Docs](https://openrouter.ai/docs)
-- [Gradio Tutorial](https://gradio.app/guides/)
-- [PDF Processing](https://pypi.org/project/PyPDF2/)
-
-## 📧 Contact
-
-- **GitHub**: [phsmartswb-ai/AI_book](https://github.com/phsmartswb-ai/AI_book)
-- **Issues**: [Report a bug](https://github.com/phsmartswb-ai/AI_book/issues)
-
-## 🙏 Acknowledgments
-
-- OpenRouter for flexible AI model access
-- Gradio for beautiful web interfaces
-- PyPDF2 for PDF processing
-- Python community for excellent libraries
-
----
-
-**Ready to get started?** Run `python rag_web_ui.py` and start asking questions! 🚀
-
-Made with ❤️ for intelligent document analysis.
+More background is available in [docs/PROJECT_DESCRIPTION.md](docs/PROJECT_DESCRIPTION.md) and [docs/RAG_GUIDE.md](docs/RAG_GUIDE.md).
